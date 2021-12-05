@@ -146,3 +146,63 @@ getAdjacencyMatrixFromEdges = function(edges, variables.names = NULL){
   }
   return(adjacencyMatrix)
 }
+
+# Computes the marginal likelihood restricted to a specific subset of nodes of the graph.
+# a is a real positive number such that the parameters of the Dirichlet distribution are given
+# by a/dim(X_s) where X_s is the cartesian space of all the modalities of the variables in
+# subset.
+marginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
+  if(a <= 0){
+    stop("a should be a positive number!")
+  }
+  # The matrix table contains all the possible combinations of the modalities of the
+  # variables in subset.
+  values = list()
+  for(i in 1:length(subset)){
+    values[[i]] = unique(data[subset[i]])[[1]]
+  }
+  table = as.matrix(expand.grid(values))
+  # For each combination of the modalities of the variables (i.e., for each row in table)
+  # we compute the number of times such combination is present in the dataframe. Such values
+  # are stored in the vector count.
+  count = c()
+  for(i in 1:dim(table)[1]){
+    variables.values = table[i,]
+    count = c(count,computeCounts(data,variables.values,subset))
+  }
+  # This is the vector of the parameters of the prior (Dirichlet) distribution. 
+  aVec = rep(a/dim(table)[1],dim(table)[1])
+  # Finally, we compute the value of the marginal likelihood as the ratio of the normalizing constants
+  # of the prior and posterior distribution.
+  ml = (gamma(sum(aVec)) / gamma(sum(aVec + count))) * (prod(gamma(aVec + count) / gamma(aVec)))
+  return(ml)
+}
+
+# Computes the (total) marginal likelihood via the factorization property of decomposable graphs.
+marginalLikelihood = function(adjacencyMatrix,data,a){
+  if(a <= 0){
+    stop("a should be a positive number!")
+  }
+  # We compute the cliques and separators of the graph.
+  decomposition = getCliquesAndSeparators(adjacencyMatrix)
+  cliques = decomposition[[1]]
+  separators = decomposition[[2]]
+  # For each clique we compute the associated marginal likelihood and store it in the
+  # vector mlC.
+  mlC = c()
+  for(i in 1:length(cliques)){
+    clique = cliques[[i]]
+    mlC = c(mlC,marginalLikelihoodSubset(adjacencyMatrix,data,clique,a))
+  }
+  # For each separator we compute the associated marginal likelihood and store it in the
+  # vector mlS.
+  mlS = c()
+  for(i in 1:length(separators)){
+    separator = separators[[i]]
+    mlS = c(mlS,marginalLikelihoodSubset(adjacencyMatrix,data,separator,a))
+  }
+  # We finally compute the total marginal likelihood via the factorization property.
+  result = prod(mlC) / prod(mlS)
+  return(result)
+}
+
