@@ -64,6 +64,38 @@ plotGraph = function(adjacencyMatrix, variables.names = NULL){
   plot(graph)
 }
 
+# Checks wheter the graph is decomposable or not. adjacencyMatrix
+# is a matrix representing the adjacency matrix of an undirected graph.
+# Optional: variables.names is a vector of strings representing
+# the names of the nodes of the graph.
+isDecomposable = function(adjacencyMatrix,variables.names = NULL){
+  if(!isUndirectedGraph(adjacencyMatrix)){
+    stop("Adjacency matrix does not represent an undirected graph.")
+  }
+  if(!is.null(variables.names)){
+    if(length(variables.names) != dim(adjacencyMatrix)[1]){
+      stop("Length of variables.names is not correct.")
+    }
+    colnames(adjacencyMatrix) = rownames(adjacencyMatrix) = variables.names
+  }
+  graph = graph_from_adjacency_matrix(adjacencyMatrix, mode = "undirected")
+  # Find all the cycles of the graph
+  cycles = NULL
+  for(vertex1 in V(graph)) {
+    for(vertex2 in neighbors(graph, vertex1, mode="out")) {
+      cycles = c(cycles, lapply(all_simple_paths(graph, vertex2,vertex1, mode="out"), function(p) c(vertex1,p)))
+    }
+  }
+  # Find the cycles of length at least 4
+  longCycles = length(cycles[which(sapply(cycles, length) >= 5)])
+  if(longCycles > 0){
+    return(FALSE)
+  }
+  else{
+    return(TRUE)
+  }
+}
+
 # Computes the (maximal) cliques and (minimal) separators of the graph. adjacencyMatrix
 # is a matrix representing the adjacency matrix of an undirected graph. value is a list
 # of two lists: the first one is a list of the cliques and the second one is a list of
@@ -82,19 +114,7 @@ getCliquesAndSeparators = function(adjacencyMatrix,variables.names = NULL){
   graph = graph_from_adjacency_matrix(adjacencyMatrix, mode = "undirected")
   cliques = maximal.cliques(graph)
   separators = min_separators(graph)
-  cliques.list = list()
-  for(i in 1:length(cliques)){
-    clique = cliques[[i]]
-    clique = colnames(adjacencyMatrix)[as.vector(clique)]
-    cliques.list[[i]] = clique
-  }
-  separators.list = list()
-  for(i in 1:length(separators)){
-    separator = separators[[i]]
-    separator = colnames(adjacencyMatrix)[as.vector(separator)]
-    separators.list[[i]] = separator
-  }
-  return(list(cliques.list,separators.list))
+  return(list(cliques,separators))
 }
 
 # Computes the adjacency matrix of an undirected graph given a vector representing
@@ -113,4 +133,3 @@ getAdjacencyMatrixFromEdges = function(edges, variables.names = NULL){
   }
   return(adjacencyMatrix)
 }
-
