@@ -3,6 +3,8 @@ library(dplyr)
 library(igraph)
 library(matrixcalc)
 library(Rlab)
+library(BDgraph)
+library(mvtnorm)
 
 # n.obs is the number of observations to simulate (int), variables.names is a vector of 
 # strings correpsonding to the names of the variables to simulate and variables.values
@@ -177,7 +179,7 @@ logMarginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
   aVec = rep(a/dim(table)[1],dim(table)[1])
   # Finally, we compute the value of the marginal likelihood as the ratio of the normalizing constants
   # of the prior and posterior distribution.
-  ml = log(gamma(sum(aVec))) - log(gamma(sum(aVec + count))) + sum(log(gamma(aVec + count)) - log(gamma(aVec)))
+  ml = lgamma(sum(aVec)) - lgamma(sum(aVec + count)) + sum(lgamma(aVec + count) - lgamma(aVec))
   return(ml)
 }
 
@@ -290,3 +292,32 @@ learnGraph = function(data,n.iter,thin,burnin){
   
   return(chain)
 }
+
+generateCategoricalDataFromGraph = function(adjacencyMatrix = NULL, n.obs, n.variables, p = NULL){
+  if(is.null(adjacencyMatrix)){
+    while(TRUE){
+      graph = erdos.renyi.game(n.variables,p,type="gnp",directed = FALSE)
+      adjacencyMatrix = as_adjacency_matrix(graph, sparse = 0)
+      if(isDecomposable(adjacencyMatrix)){
+        break
+      }
+    }
+  }
+  if(!isDecomposable(adjacencyMatrix)){
+    stop("Graph should be decomposable.")
+  }
+  covariance = rgwish(1, adj = adjacencyMatrix)
+  mu = c(rep(0, n.variables))
+  data = data.frame(rmvnorm(n.obs, mu, covariance))
+  for(i in 1:n.variables){
+    gamma = runif(1, quantile(data[,i], 0.05), quantile(data[,i], 0.95))
+    data[,i][data[,i] >= gamma] = 1
+    data[,i][data[,i] < gamma] = 0
+  }
+  return(list(adjacencyMatrix, data))
+}
+
+# data = generateCategoricalData(100,c("A","B","C"),list(c(0,1),c("a","b"),c(1,2,3,4)))
+data = generateCategoricalDataFromGraph(n.obs = 1000, n.variables = 8, p = 0.6)
+plotGraph(data[[1]])
+chain = learnGraph(data[[2]],5000,10,1000)
