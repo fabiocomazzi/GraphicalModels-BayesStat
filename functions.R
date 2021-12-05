@@ -177,8 +177,8 @@ logMarginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
   aVec = rep(a/dim(table)[1],dim(table)[1])
   # Finally, we compute the value of the marginal likelihood as the ratio of the normalizing constants
   # of the prior and posterior distribution.
-  ml = (gamma(sum(aVec)) / gamma(sum(aVec + count))) * (prod(gamma(aVec + count) / gamma(aVec)))
-  return(log(ml))
+  ml = log(gamma(sum(aVec))) - log(gamma(sum(aVec + count))) + sum(log(gamma(aVec + count)) - log(gamma(aVec)))
+  return(ml)
 }
 
 # Computes the (total) marginal likelihood via the factorization property of decomposable graphs.
@@ -289,20 +289,4 @@ learnGraph = function(data,n.iter,thin,burnin){
   close(progressBarBI)
   
   return(chain)
-}
-
-
-data = generateCategoricalData(100,c("Var1","Var2","Var3","Var4","Var5"),list(c(0,1),c("a","b","c"),c(1,2,3,4),c(TRUE,FALSE),c("Low","Medium","High")))
-# adj = getAdjacencyMatrixFromEdges(c(1,2,2,3,3,4,4,1,4,2,1,5))
-# colnames(adj) = rownames(adj) = c("Var1","Var2","Var3","Var4","Var5")
-# clique = as.vector(getCliquesAndSeparators(adj)[[1]][[1]])
-# logMarginalLikelihoodSubset(adj,data,clique,71.61)
-# plotGraph(adj)
-# cliques = getCliquesAndSeparators(adj)[[1]]
-# clique = cliques[[1]]
-# logMarginalLikelihoodSubset(adj,data,clique,2)
-# logMarginalLikelihood(adj,data,1)
-chain = learnGraph(data,100,10,5)
-for(i in 1:length(chain)){
-  plotGraph(chain[[i]])
 }
