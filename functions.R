@@ -29,10 +29,11 @@ computeCounts = function(data, variables.values, variables.names = NULL){
   if(length(variables.names) != length(variables.values)){
     stop("The lenghts of variables.names and variables.values do not match")
   }
+  temp = data
   for(i in 1:length(variables.names)){
-    data = data %>% filter(data[variables.names[i]] == variables.values[i])
+    temp = temp %>% filter(temp[variables.names[i]] == variables.values[i])
   }
-  return(dim(data)[1])
+  return(dim(temp)[1])
 }
 
 # Checks if adjacencyMatrix is the adjacency matrix of an undirected graph. 
@@ -158,6 +159,7 @@ marginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
   }
   # The matrix table contains all the possible combinations of the modalities of the
   # variables in subset.
+  subset = as.vector(subset)
   values = list()
   for(i in 1:length(subset)){
     values[[i]] = unique(data[subset[i]])[[1]]
@@ -198,9 +200,14 @@ marginalLikelihood = function(adjacencyMatrix,data,a){
   # For each separator we compute the associated marginal likelihood and store it in the
   # vector mlS.
   mlS = c()
-  for(i in 1:length(separators)){
-    separator = separators[[i]]
-    mlS = c(mlS,marginalLikelihoodSubset(adjacencyMatrix,data,separator,a))
+  if(length(separators) == 0){
+    mlS = c(1)
+  }
+  else{
+    for(i in 1:length(separators)){
+      separator = separators[[i]]
+      mlS = c(mlS,marginalLikelihoodSubset(adjacencyMatrix,data,separator,a))
+    }
   }
   # We finally compute the total marginal likelihood via the factorization property.
   result = prod(mlC) / prod(mlS)
@@ -252,9 +259,9 @@ learnGraph = function(data,n.iter,thin,burnin){
   for(i in 1:burnin){
     setTxtProgressBar(progressBarBI,i)
     newCandidate = newGraphProposal(currentCandidate)
-    num = marginalLikelihood(newCandidate,data,1)
-    den = marginalLikelihood(currentCandidate,data,1)
-    acceptanceProbability = num/den
+    num = marginalLikelihood(newCandidate,data,40)
+    den = marginalLikelihood(currentCandidate,data,40)
+    acceptanceProbability = min(num/den,1)
     accepted = rbern(1,acceptanceProbability)
     if(accepted == 1){
       currentCandidate = newCandidate
@@ -268,9 +275,9 @@ learnGraph = function(data,n.iter,thin,burnin){
   for(i in 1:n.iter){
     setTxtProgressBar(progressBar,i)
     newCandidate = newGraphProposal(currentCandidate)
-    num = marginalLikelihood(newCandidate,data,1)
-    den = marginalLikelihood(currentCandidate,data,1)
-    acceptanceProbability = num/den
+    num = marginalLikelihood(newCandidate,data,40)
+    den = marginalLikelihood(currentCandidate,data,40)
+    acceptanceProbability = min(num/den,1)
     accepted = rbern(1,acceptanceProbability)
     if(accepted == 1){
       currentCandidate = newCandidate
@@ -286,12 +293,13 @@ learnGraph = function(data,n.iter,thin,burnin){
 
 
 data = generateCategoricalData(100,c("Var1","Var2","Var3","Var4","Var5"),list(c(0,1),c("a","b","c"),c(1,2,3,4),c(TRUE,FALSE),c("Low","Medium","High")))
-adj = getAdjacencyMatrixFromEdges(c(1,2,2,3,3,4,4,1,4,2,1,5))
-colnames(adj) = rownames(adj) = c("Var1","Var2","Var3","Var4","Var5")
+# adj = getAdjacencyMatrixFromEdges(c(1,2,2,3,3,4,4,1,4,2,1,5))
+# colnames(adj) = rownames(adj) = c("Var1","Var2","Var3","Var4","Var5")
+# clique = as.vector(getCliquesAndSeparators(adj)[[1]][[1]])
+# marginalLikelihoodSubset(adj,data,clique,71.61)
 # plotGraph(adj)
 # cliques = getCliquesAndSeparators(adj)[[1]]
 # clique = cliques[[1]]
 # marginalLikelihoodSubset(adj,data,clique,2)
 # marginalLikelihood(adj,data,1)
-
 learnGraph(data,100,10,5)
