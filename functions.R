@@ -153,7 +153,7 @@ getAdjacencyMatrixFromEdges = function(edges, variables.names = NULL){
 # a is a real positive number such that the parameters of the Dirichlet distribution are given
 # by a/dim(X_s) where X_s is the cartesian space of all the modalities of the variables in
 # subset.
-marginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
+logMarginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
   if(a <= 0){
     stop("a should be a positive number!")
   }
@@ -178,11 +178,11 @@ marginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
   # Finally, we compute the value of the marginal likelihood as the ratio of the normalizing constants
   # of the prior and posterior distribution.
   ml = (gamma(sum(aVec)) / gamma(sum(aVec + count))) * (prod(gamma(aVec + count) / gamma(aVec)))
-  return(ml)
+  return(log(ml))
 }
 
 # Computes the (total) marginal likelihood via the factorization property of decomposable graphs.
-marginalLikelihood = function(adjacencyMatrix,data,a){
+logMarginalLikelihood = function(adjacencyMatrix,data,a){
   if(a <= 0){
     stop("a should be a positive number!")
   }
@@ -195,22 +195,22 @@ marginalLikelihood = function(adjacencyMatrix,data,a){
   mlC = c()
   for(i in 1:length(cliques)){
     clique = cliques[[i]]
-    mlC = c(mlC,marginalLikelihoodSubset(adjacencyMatrix,data,clique,a))
+    mlC = c(mlC,logMarginalLikelihoodSubset(adjacencyMatrix,data,clique,a))
   }
   # For each separator we compute the associated marginal likelihood and store it in the
   # vector mlS.
   mlS = c()
   if(length(separators) == 0){
-    mlS = c(1)
+    mlS = c(0)
   }
   else{
     for(i in 1:length(separators)){
       separator = separators[[i]]
-      mlS = c(mlS,marginalLikelihoodSubset(adjacencyMatrix,data,separator,a))
+      mlS = c(mlS,logMarginalLikelihoodSubset(adjacencyMatrix,data,separator,a))
     }
   }
   # We finally compute the total marginal likelihood via the factorization property.
-  result = prod(mlC) / prod(mlS)
+  result = sum(mlC) - sum(mlS)
   return(result)
 }
 
@@ -259,9 +259,9 @@ learnGraph = function(data,n.iter,thin,burnin){
   for(i in 1:burnin){
     setTxtProgressBar(progressBarBI,i)
     newCandidate = newGraphProposal(currentCandidate)
-    num = marginalLikelihood(newCandidate,data,40)
-    den = marginalLikelihood(currentCandidate,data,40)
-    acceptanceProbability = min(num/den,1)
+    num = logMarginalLikelihood(newCandidate,data,40)
+    den = logMarginalLikelihood(currentCandidate,data,40)
+    acceptanceProbability = min(exp(num - den),1)
     accepted = rbern(1,acceptanceProbability)
     if(accepted == 1){
       currentCandidate = newCandidate
@@ -275,9 +275,9 @@ learnGraph = function(data,n.iter,thin,burnin){
   for(i in 1:n.iter){
     setTxtProgressBar(progressBar,i)
     newCandidate = newGraphProposal(currentCandidate)
-    num = marginalLikelihood(newCandidate,data,40)
-    den = marginalLikelihood(currentCandidate,data,40)
-    acceptanceProbability = min(num/den,1)
+    num = logMarginalLikelihood(newCandidate,data,40)
+    den = logMarginalLikelihood(currentCandidate,data,40)
+    acceptanceProbability = min(exp(num - den),1)
     accepted = rbern(1,acceptanceProbability)
     if(accepted == 1){
       currentCandidate = newCandidate
@@ -296,10 +296,13 @@ data = generateCategoricalData(100,c("Var1","Var2","Var3","Var4","Var5"),list(c(
 # adj = getAdjacencyMatrixFromEdges(c(1,2,2,3,3,4,4,1,4,2,1,5))
 # colnames(adj) = rownames(adj) = c("Var1","Var2","Var3","Var4","Var5")
 # clique = as.vector(getCliquesAndSeparators(adj)[[1]][[1]])
-# marginalLikelihoodSubset(adj,data,clique,71.61)
+# logMarginalLikelihoodSubset(adj,data,clique,71.61)
 # plotGraph(adj)
 # cliques = getCliquesAndSeparators(adj)[[1]]
 # clique = cliques[[1]]
-# marginalLikelihoodSubset(adj,data,clique,2)
-# marginalLikelihood(adj,data,1)
-learnGraph(data,100,10,5)
+# logMarginalLikelihoodSubset(adj,data,clique,2)
+# logMarginalLikelihood(adj,data,1)
+chain = learnGraph(data,100,10,5)
+for(i in 1:length(chain)){
+  plotGraph(chain[[i]])
+}
