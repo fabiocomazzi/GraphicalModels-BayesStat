@@ -206,3 +206,29 @@ marginalLikelihood = function(adjacencyMatrix,data,a){
   return(result)
 }
 
+# Given the adjacency matrix of a decomposable graph, computes the adjacency matrix
+# of a new decomposable graph obtained by either adding or removing a single edge
+# from the original graph. Observe that the proposal density is choosen so that
+# q(G|G')/q(G'|G) = 1.
+newGraphProposal = function(adjacencyMatrix){
+  if(!isDecomposable(adjacencyMatrix)){
+    stop("The graph must be decomposable!")
+  }
+  proposals = list()
+  count = 1
+  for(i in 1:(dim(adjacencyMatrix)[1] - 1)){
+    for(j in 1:(dim(adjacencyMatrix)[2] - i)){
+      newAdjacencyMatrix = adjacencyMatrix
+      value = newAdjacencyMatrix[i,i+j]
+      newAdjacencyMatrix[i,i+j] = newAdjacencyMatrix[i+j,i] = as.integer(!value)
+      proposals[[count]] = newAdjacencyMatrix
+      count = count + 1
+    }
+  }
+  while(TRUE){
+    proposalIndex = rdunif(1,1,count-1)
+    if(isDecomposable(proposals[[proposalIndex]])){
+      return(proposals[[proposalIndex]])
+    }
+  }
+}
