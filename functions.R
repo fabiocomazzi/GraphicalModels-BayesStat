@@ -2,6 +2,7 @@ library(extraDistr)
 library(dplyr)
 library(igraph)
 library(matrixcalc)
+library(Rlab)
 
 # n.obs is the number of observations to simulate (int), variables.names is a vector of 
 # strings correpsonding to the names of the variables to simulate and variables.values
@@ -232,3 +233,65 @@ newGraphProposal = function(adjacencyMatrix){
     }
   }
 }
+
+learnGraph = function(data,n.iter,thin,burnin){
+  variables.names = colnames(data)
+  # Generate a first candidate proposal. Observe that we make sure the generated
+  # graph is decomposable
+  while(TRUE){
+    graph = erdos.renyi.game(length(variables.names),0.5,type="gnp",directed = FALSE)
+    currentCandidate = as_adjacency_matrix(graph, sparse = 0)
+    if(isDecomposable(currentCandidate)){
+      break
+    }
+  }
+  colnames(currentCandidate) = rownames(currentCandidate) = variables.names
+  # Run the burnin iterations
+  message("BURN-IN")
+  progressBarBI = txtProgressBar(min = 0, max = burnin, initial = 0) 
+  for(i in 1:burnin){
+    setTxtProgressBar(progressBarBI,i)
+    newCandidate = newGraphProposal(currentCandidate)
+    num = marginalLikelihood(newCandidate,data,1)
+    den = marginalLikelihood(currentCandidate,data,1)
+    acceptanceProbability = num/den
+    accepted = rbern(1,acceptanceProbability)
+    if(accepted == 1){
+      currentCandidate = newCandidate
+    }
+  }
+  close(progressBarBI)
+  # Run the chain
+  message("Metropolis-Hastings")
+  progressBar = txtProgressBar(min = 0, max = n.iter, initial = 0) 
+  chain = list()
+  for(i in 1:n.iter){
+    setTxtProgressBar(progressBar,i)
+    newCandidate = newGraphProposal(currentCandidate)
+    num = marginalLikelihood(newCandidate,data,1)
+    den = marginalLikelihood(currentCandidate,data,1)
+    acceptanceProbability = num/den
+    accepted = rbern(1,acceptanceProbability)
+    if(accepted == 1){
+      currentCandidate = newCandidate
+    }
+    if(i %% thin == 0){
+      chain[[i/thin]] = currentCandidate
+    }
+  }
+  close(progressBarBI)
+  
+  return(chain)
+}
+
+
+data = generateCategoricalData(100,c("Var1","Var2","Var3","Var4","Var5"),list(c(0,1),c("a","b","c"),c(1,2,3,4),c(TRUE,FALSE),c("Low","Medium","High")))
+adj = getAdjacencyMatrixFromEdges(c(1,2,2,3,3,4,4,1,4,2,1,5))
+colnames(adj) = rownames(adj) = c("Var1","Var2","Var3","Var4","Var5")
+# plotGraph(adj)
+# cliques = getCliquesAndSeparators(adj)[[1]]
+# clique = cliques[[1]]
+# marginalLikelihoodSubset(adj,data,clique,2)
+# marginalLikelihood(adj,data,1)
+
+learnGraph(data,100,10,5)
