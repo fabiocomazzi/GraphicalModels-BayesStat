@@ -3,7 +3,7 @@ source("categorical.R")
 
 data = generateCategoricalDataFromGraph(n.obs = 100, n.variables = 4, p = 0.6, variables.names = c("First","Second","Third","Fourth"))
 plotGraph(data[[1]], main = "True Graph")
-chain = MetropolisHastingsCategorical(data[[2]],100,1,100)
+chain = MetropolisHastingsCategorical(data[[2]],1000,1,100)
 total = chain[[1]]
 for(i in 2:length(chain)){
   total = total + chain[[i]]
