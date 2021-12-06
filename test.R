@@ -1,9 +1,9 @@
 setwd("~/GitHub/GraphicalMdels-BayesStat")
 source("categorical.R")
 
-data = generateCategoricalDataFromGraph(n.obs = 100, n.variables = 4, p = 0.6, variables.names = c("First","Second","Third","Fourth"))
+data = generateCategoricalDataFromGraph(n.obs = 1000, n.variables = 6, p = 0.3)
 plotGraph(data[[1]], main = "True Graph")
-chain = MetropolisHastingsCategorical(data[[2]],1000,1,100)
+chain = MetropolisHastingsCategorical(data[[2]],100,1,100)
 total = chain[[1]]
 for(i in 2:length(chain)){
   total = total + chain[[i]]
