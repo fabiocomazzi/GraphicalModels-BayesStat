@@ -5,6 +5,7 @@ library(matrixcalc)
 library(Rlab)
 library(BDgraph)
 library(mvtnorm)
+library(plyr)
 
 # n.obs is the number of observations to simulate (int), n.variables is the number of 
 # random variables to generate and (optional) variables.names is a vector of 
@@ -155,4 +156,40 @@ newGraphProposal = function(adjacencyMatrix){
       return(proposals[[proposalIndex]])
     }
   }
+}
+
+# Computes the prior ratio for the MH algorithm in the case of a Binomial prior
+binomialPrior = function(currentProposal,newProposal,p){
+  if(p < 0 | p > 1){
+    stop("p should be between 0 and 1!")
+  }
+  currentEdges = sum(currentProposal) / 2
+  newEdges = sum(newProposal) / 2
+  q = dim(currentProposal)[1]
+  ratio = ((p ** newEdges) * ((1 - p) ** (q*(q-1)/2 - newEdges))) / ((p ** currentEdges) * ((1 - p) ** (q*(q-1)/2 - currentEdges)))
+  return(ratio)
+}
+
+# Computes the graph that includes all the edges with posterior inclusion probability >= 0.5
+medianProbabilityGraph = function(chain){
+  mpg = chain[[1]]
+  for(i in 2:length(chain)){
+    mpg = mpg + chain[[i]]
+  }
+  mpg = mpg / length(chain)
+  mpg = replace(mpg, mpg < 0.5, 0)
+  mpg = replace(mpg, mpg >= 0.5, 1)
+  
+  return(mpg)
+}
+
+# Computes the most frequent graph
+maximumPosterioriGraph = function(chain){
+  uniqueValues = count(unlist(lapply(chain, toString)))
+  map.index = which(uniqueValues$freq == max(uniqueValues$freq))
+  map = uniqueValues$x[map.index]
+  map = as.integer(unlist(strsplit(map,", ")))
+  map = matrix(map,nrow = sqrt(length(map)))
+  
+  return(map)
 }

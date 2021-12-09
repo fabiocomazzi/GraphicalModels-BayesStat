@@ -86,18 +86,15 @@ logMarginalLikelihood = function(adjacencyMatrix,data,a){
 # Implemenation of the Metropolis-Hastings algorithm to make inference on the 
 # graph generating the data collected in the dataframe "data". n.iter is the length
 # of the chain, thin is the thinning and burnin is the burnin.
-MetropolisHastingsCategorical = function(data,n.iter,thin = 1,burnin = 0){
-  variables.names = colnames(data)
-  # Generate a first candidate proposal. Observe that we make sure the generated
-  # graph is decomposable
-  while(TRUE){
-    graph = erdos.renyi.game(length(variables.names),0.5,type="gnp",directed = FALSE)
-    currentCandidate = as_adjacency_matrix(graph, sparse = 0)
-    if(isDecomposable(currentCandidate)){
-      break
-    }
+MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0,thin = 1,prior,p = NULL){
+  # We check that the passed parameters are correct
+  if(!prior %in% c("Uniform","Binomial","Beta-Binomial")){
+    stop("prior should be either 'Uniform', 'Binomial' or 'Beta-Binomial'!")
   }
-  colnames(currentCandidate) = rownames(currentCandidate) = variables.names
+  if(!isDecomposable(initialCandidate)){
+    stop("Initial candidate graph should be decomposable!")
+  }
+  currentCandidate = initialCandidate
   # Run the burnin iterations
   message("BURN-IN")
   progressBarBI = txtProgressBar(min = 0, max = burnin, initial = 0, style = 3) 
@@ -106,7 +103,9 @@ MetropolisHastingsCategorical = function(data,n.iter,thin = 1,burnin = 0){
     newCandidate = newGraphProposal(currentCandidate)
     num = logMarginalLikelihood(newCandidate,data,2)
     den = logMarginalLikelihood(currentCandidate,data,2)
-    acceptanceProbability = min(exp(num - den),1)
+    marginalRatio = exp(num - den)
+    priorRatio = switch(prior, "Uniform" = 1, "Binomial" = binomialPrior(currentCandidate,newCandidate,p), "Beta-Binomial" = 1)
+    acceptanceProbability = min(marginalRatio * priorRatio,1)
     accepted = rbern(1,acceptanceProbability)
     if(accepted == 1){
       currentCandidate = newCandidate
@@ -123,7 +122,9 @@ MetropolisHastingsCategorical = function(data,n.iter,thin = 1,burnin = 0){
     newCandidate = newGraphProposal(currentCandidate)
     num = logMarginalLikelihood(newCandidate,data,2)
     den = logMarginalLikelihood(currentCandidate,data,2)
-    acceptanceProbability = min(exp(num - den),1)
+    marginalRatio = exp(num - den)
+    priorRatio = switch(prior, "Uniform" = 1, "Binomial" = binomialPrior(currentCandidate,newCandidate,p), "Beta-Binomial" = 1)
+    acceptanceProbability = min(marginalRatio * priorRatio,1)
     accepted = rbern(1,acceptanceProbability)
     c = c + accepted
     if(accepted == 1){
