@@ -17,7 +17,7 @@ while(TRUE){
 plotGraph(initialCandidate, main = "Initial Candidate")
 
 # Run the chain
-chain = MetropolisHastingsCategorical(data[[2]],initialCandidate,1000,1000,10,prior = "Binomial", p = 0.3)
+chain = MetropolisHastingsCategorical(data[[2]],initialCandidate,1000,1000,10,prior = "Beta-Binomial",a=3,b=2)
 
 # Median Probability Graph
 mpg = medianProbabilityGraph(chain)
@@ -26,3 +26,4 @@ plotGraph(mpg,main = "Median Probability")
 # Maximum a Posteriori Graph
 map = maximumPosterioriGraph(chain)
 plotGraph(map, main = "Maximum a Posteriori")
+

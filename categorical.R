@@ -86,7 +86,7 @@ logMarginalLikelihood = function(adjacencyMatrix,data,a){
 # Implemenation of the Metropolis-Hastings algorithm to make inference on the 
 # graph generating the data collected in the dataframe "data". n.iter is the length
 # of the chain, thin is the thinning and burnin is the burnin.
-MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0,thin = 1,prior,p = NULL){
+MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0,thin = 1,prior,p = NULL,a = NULL,b = NULL){
   # We check that the passed parameters are correct
   if(!prior %in% c("Uniform","Binomial","Beta-Binomial")){
     stop("prior should be either 'Uniform', 'Binomial' or 'Beta-Binomial'!")
@@ -104,7 +104,7 @@ MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0
     num = logMarginalLikelihood(newCandidate,data,2)
     den = logMarginalLikelihood(currentCandidate,data,2)
     marginalRatio = exp(num - den)
-    priorRatio = switch(prior, "Uniform" = 1, "Binomial" = binomialPrior(currentCandidate,newCandidate,p), "Beta-Binomial" = 1)
+    priorRatio = switch(prior, "Uniform" = 1, "Binomial" = binomialPrior(currentCandidate,newCandidate,p), "Beta-Binomial" = betaBinomialPrior(currentCandidate,newCandidate,a,b))
     acceptanceProbability = min(marginalRatio * priorRatio,1)
     accepted = rbern(1,acceptanceProbability)
     if(accepted == 1){
@@ -123,7 +123,7 @@ MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0
     num = logMarginalLikelihood(newCandidate,data,2)
     den = logMarginalLikelihood(currentCandidate,data,2)
     marginalRatio = exp(num - den)
-    priorRatio = switch(prior, "Uniform" = 1, "Binomial" = binomialPrior(currentCandidate,newCandidate,p), "Beta-Binomial" = 1)
+    priorRatio = switch(prior, "Uniform" = 1, "Binomial" = binomialPrior(currentCandidate,newCandidate,p), "Beta-Binomial" = betaBinomialPrior(currentCandidate,newCandidate,a,b))
     acceptanceProbability = min(marginalRatio * priorRatio,1)
     accepted = rbern(1,acceptanceProbability)
     c = c + accepted

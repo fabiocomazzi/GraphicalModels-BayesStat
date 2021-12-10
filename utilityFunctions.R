@@ -160,6 +160,9 @@ newGraphProposal = function(adjacencyMatrix){
 
 # Computes the prior ratio for the MH algorithm in the case of a Binomial prior
 binomialPrior = function(currentProposal,newProposal,p){
+  if(is.null(p)){
+    stop("p should be between 0 and 1!")
+  }
   if(p < 0 | p > 1){
     stop("p should be between 0 and 1!")
   }
@@ -168,6 +171,25 @@ binomialPrior = function(currentProposal,newProposal,p){
   q = dim(currentProposal)[1]
   ratio = ((p ** newEdges) * ((1 - p) ** (q*(q-1)/2 - newEdges))) / ((p ** currentEdges) * ((1 - p) ** (q*(q-1)/2 - currentEdges)))
   return(ratio)
+}
+
+betaBinomialPrior = function(currentProposal,newProposal,a,b){
+  num = logIntegralBetaBinomial(newProposal,a,b)
+  den = logIntegralBetaBinomial(currentProposal,a,b)
+  return(exp(num-den))
+}
+
+logIntegralBetaBinomial = function(graph,a,b){
+  if(is.null(a) | is.null(b)){
+    stop("a and b should be positive real numbers!")
+  }
+  if(a<=0 | b<=0){
+    stop("a and b should be positive real numbers!")
+  }
+  edges = sum(graph) / 2
+  q = dim(graph)[1]
+  integral = lgamma(a + edges) + lgamma(b + q*(q-1)/2 - edges) - lgamma(q*(q-1)/2 + a + b) + lgamma(a + b) - lgamma(a) - lgamma(b)
+  return(integral)
 }
 
 # Computes the graph that includes all the edges with posterior inclusion probability >= 0.5
