@@ -6,6 +6,7 @@ library(Rlab)
 library(BDgraph)
 library(mvtnorm)
 library(plyr)
+library(pcalg)
 
 # n.obs is the number of observations to simulate (int), n.variables is the number of 
 # random variables to generate and (optional) variables.names is a vector of 
@@ -25,7 +26,7 @@ generateCategoricalDataFromGraph = function(adjacencyMatrix = NULL, n.obs, n.var
   if(!isDecomposable(adjacencyMatrix)){
     stop("Graph should be decomposable.")
   }
-  inv.covariance = rgwish(1, adj = adjacencyMatrix)
+  inv.covariance = rgwish(1, adj = adjacencyMatrix, D = 10 * diag(1,n.variables))
   covariance = solve(inv.covariance)
   mu = c(rep(0, n.variables))
   data = data.frame(rmvnorm(n.obs, mu, covariance))
@@ -214,4 +215,10 @@ maximumPosterioriGraph = function(chain){
   map = matrix(map,nrow = sqrt(length(map)))
   
   return(map)
+}
+
+computeSHD = function(adj1, adj2){
+  graph1 = as_graphnel(graph_from_adjacency_matrix(adj1,mode = "undirected"))
+  graph2 = as_graphnel(graph_from_adjacency_matrix(adj2,mode = "undirected"))
+  return(shd(graph1,graph2))
 }
