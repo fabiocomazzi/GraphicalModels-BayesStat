@@ -72,7 +72,6 @@ plotGraph = function(adjacencyMatrix, variables.names = NULL, main = NULL){
     colnames(adjacencyMatrix) = rownames(adjacencyMatrix) = variables.names
   }
   graph = graph_from_adjacency_matrix(adjacencyMatrix, mode = "undirected")
-  x11()
   plot(graph, main = main)
 }
 
@@ -217,8 +216,21 @@ maximumPosterioriGraph = function(chain){
   return(map)
 }
 
-computeSHD = function(adj1, adj2){
-  graph1 = as_graphnel(graph_from_adjacency_matrix(adj1,mode = "undirected"))
-  graph2 = as_graphnel(graph_from_adjacency_matrix(adj2,mode = "undirected"))
+# Computes the Structural Hamming Distance between two graphs given their adjacency matrices
+computeSHD = function(adjacencyMatrix1, adjacencyMatrix2){
+  graph1 = as_graphnel(graph_from_adjacency_matrix(adjacencyMatrix1,mode = "undirected"))
+  graph2 = as_graphnel(graph_from_adjacency_matrix(adjacencyMatrix2,mode = "undirected"))
   return(shd(graph1,graph2))
+}
+
+# Econdes a graph with a unique integer value given its adjacency matrix
+encodeGraph = function(adjacencyMatrix){
+  result = ""
+  for(i in 1:(dim(adjacencyMatrix)[1] - 1)){
+    for(j in 1:(dim(adjacencyMatrix)[2] - i)){
+      result = paste0(result,as.character(adjacencyMatrix[i,i+j]))
+    }
+  }
+  result = strtoi(result,base = 2)
+  return(result)
 }
