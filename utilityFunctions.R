@@ -7,6 +7,8 @@ library(BDgraph)
 library(mvtnorm)
 library(plyr)
 library(pcalg)
+library(gRbase)
+library(tidyverse)
 
 # n.obs is the number of observations to simulate (int), n.variables is the number of 
 # random variables to generate and (optional) variables.names is a vector of 
@@ -108,9 +110,14 @@ getCliquesAndSeparators = function(adjacencyMatrix,variables.names = NULL){
     }
     colnames(adjacencyMatrix) = rownames(adjacencyMatrix) = variables.names
   }
-  graph = graph_from_adjacency_matrix(adjacencyMatrix, mode = "undirected")
-  cliques = maximal.cliques(graph)
-  separators = min_separators(graph)
+  decomposition = mpd(adjacencyMatrix)
+  cliques = as.list(lapply(decomposition$cliques, as.numeric))
+  cliques = unname(cliques[sapply(cliques, length) > 0])
+  separators = as.list(lapply(decomposition$separators, as.numeric))
+  separators = unname(separators[sapply(separators, length) > 0])
+  # graph = graph_from_adjacency_matrix(adjacencyMatrix, mode = "undirected")
+  # cliques = maximal.cliques(graph)
+  # separators = min_separators(graph)
   return(list(cliques,separators))
 }
 
