@@ -8,7 +8,6 @@ library(mvtnorm)
 library(plyr)
 library(pcalg)
 library(gRbase)
-library(tidyverse)
 
 # n.obs is the number of observations to simulate (int), n.variables is the number of 
 # random variables to generate and (optional) variables.names is a vector of 
@@ -31,11 +30,16 @@ generateCategoricalDataFromGraph = function(adjacencyMatrix = NULL, n.obs, n.var
   inv.covariance = rgwish(1, adj = adjacencyMatrix, D = 10 * diag(1,n.variables))
   covariance = solve(inv.covariance)
   mu = c(rep(0, n.variables))
-  data = data.frame(rmvnorm(n.obs, mu, covariance))
+  data = dataCopy = data.frame(rmvnorm(n.obs, mu, covariance))
   for(i in 1:n.variables){
-    gamma = runif(1, quantile(data[,i], 0.05), quantile(data[,i], 0.95))
-    data[,i][data[,i] >= gamma] = 1
-    data[,i][data[,i] < gamma] = 0
+    while(TRUE){
+      gamma = runif(1, quantile(dataCopy[,i], 0.2), quantile(dataCopy[,i], 0.8))
+      data[,i][dataCopy[,i] >= gamma] = 1
+      data[,i][dataCopy[,i] < gamma] = 0
+      if(length(unique(data[,i])) > 1){
+        break
+      }
+    }
   }
   
   if(!is.null(variables.names)){
