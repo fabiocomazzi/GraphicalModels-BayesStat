@@ -1,6 +1,6 @@
 rm(list = ls())
 setwd("~/GitHub/GraphicalModels-BayesStat")
-source("categorical.R")
+source("Gaussian.R")
 
 # Generate 20 decomposable graph that will be used as the true graph to generate
 # 20 different datasets
@@ -25,9 +25,9 @@ mpg_distances = c()
 map_distances = c()
 count = 1
 for(trueGraph in trueGraphs){
-  data = generateCategoricalDataFromGraph(adjacencyMatrix = trueGraph, n.obs = 10000, n.variables = 6, p = 0.3)
+  data = generateGaussianDataFromGraph(adjacencyMatrix = trueGraph, n.obs = 10000, n.variables = 6)
   initialCandidate = matrix(0,6,6)
-  chain = MetropolisHastingsCategorical(data[[2]],initialCandidate,1000,500,1,prior = "Binomial",p=0.3)
+  chain = MetropolisHastingsGaussian(data[[2]], initialCandidate, 1000, 500, 1, prior = "Binomial", p=0.3)
   
   # Median Probability Graph
   mpg = medianProbabilityGraph(chain)

@@ -1,4 +1,4 @@
-setwd("~/GitHub/GraphicalMdels-BayesStat")
+setwd("~/GitHub/GraphicalModels-BayesStat")
 source("utilityFunctions.R")
 
 # data is a dataframe of categorical variables, variables.names is a vector of strings
