@@ -8,6 +8,7 @@ library(mvtnorm)
 library(plyr)
 library(pcalg)
 library(gRbase)
+library(abind)
 
 # n.obs is the number of observations to simulate (int), n.variables is the number of 
 # random variables to generate and (optional) variables.names is a vector of 
@@ -234,7 +235,7 @@ computeSHD = function(adjacencyMatrix1, adjacencyMatrix2){
   return(shd(graph1,graph2))
 }
 
-# Econdes a graph with a unique integer value given its adjacency matrix
+# Encondes a graph with a unique integer value given its adjacency matrix
 encodeGraph = function(adjacencyMatrix){
   result = ""
   for(i in 1:(dim(adjacencyMatrix)[1] - 1)){
@@ -244,4 +245,32 @@ encodeGraph = function(adjacencyMatrix){
   }
   result = strtoi(result,base = 2)
   return(result)
+}
+
+# Creates a sample drawn from the baseline measure over graphs. In particular, S is the number
+# of desired draws, burn is the burn-in, q is the number of nodes in the graph and a_pi, b_pi are
+# the hyper-parameters of the Beta prior on probability of edge inclusion pi.
+sampleFromBaseline = function(S, burn, q, a_pi, b_pi){
+  chain = array(NA, c(q, q, S)) # Initialize the chain with S adjacency matrices of NA's
+  # The initial graph has no edges
+  graph = matrix(0, q, q)
+  chain[,,1] = graph
+  # MCMC sampler to draw the remaining graphs from the baseline measure
+  for(s in 2:S){
+    newGraph = newGraphProposal(graph) # Draw a decomposable graph from the neighborhood of the current graph
+    # Compute the multiplicity correction (log)prior.
+    # Note that the number of edges of the graph is given by sum(adjacencyMatrix) / 2 since the graphs are decomposable
+    logPriorNew = lgamma((sum(newGraph) / 2) + a_pi) + lgamma(q*(q-1)/2 - (sum(newGraph) / 2) + b_pi - 1) # New candidate
+    logPriorOld = lgamma((sum(graph) / 2) + a_pi) + lgamma(q*(q-1)/2 - (sum(graph) / 2) + b_pi - 1) # Current candidate
+    logPrior = logPriorNew - logPriorOld
+    # Acceptance ratio
+    acceptanceRatio = min(0, logPrior)
+    # Check if the new candidate is accepted
+    if(log(runif(1)) < acceptanceRatio){
+      graph = newGraph
+    }
+    chain[,,s] = graph
+  }
+  chain = chain[,,(burn + 1):S] # Discard burn-in samples
+  return(chain)
 }

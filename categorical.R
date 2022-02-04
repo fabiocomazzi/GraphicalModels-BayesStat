@@ -1,16 +1,6 @@
 setwd("~/GitHub/GraphicalModels-BayesStat")
 source("utilityFunctions.R")
 
-library(pcalg)
-library(gRbase)
-library(mvtnorm)
-library(abind)
-
-source("sample_normal_dag_wishart.r")
-source("norm_constant_normal_dag_wishart.r")
-source("move_dag.r")
-source("sample_from_baseline.r")
-
 # data is a dataframe of categorical variables, variables.names is a vector of strings
 # corresponding to the names of the variables to consider and variables.values is a 
 # vector whose elements corresponds to the values of the variables in variables.names.
@@ -154,7 +144,7 @@ MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0
 DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
   n = nrow(data)
   q = ncol(data)
-  out_baseline = sample_baseline_dags(S = n.iter, burn = burnin, q = q, a_pi, b_pi)$DAG_chain
+  baseline = sampleFromBaseline(S = n.iter, burn = burnin, q = q, a_pi, b_pi)
   
   Xi_chain = matrix(NA, n, n.iter)
   # n x n.iter matrix which collects the cluster indicators of each unit for every iteration 
@@ -180,8 +170,7 @@ DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
   Xi_chain[,1] = xi
   
   
-  Dags = A_0
-  
+  graphs = A_0
   r = table(xi)
   
   ## MCMC iterations
