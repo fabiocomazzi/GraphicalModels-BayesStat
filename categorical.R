@@ -55,6 +55,9 @@ logMarginalLikelihood = function(adjacencyMatrix,data,a){
   if(a <= 0){
     stop("a should be a positive number!")
   }
+  if(dim(data)[1] == 0){
+    return(0)
+  }
   # We compute the cliques and separators of the graph.
   decomposition = getCliquesAndSeparators(adjacencyMatrix)
   cliques = decomposition[[1]]
@@ -134,7 +137,7 @@ MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0
       chain[[i/thin]] = currentCandidate
     }
   }
-  close(progressBarBI)
+  close(progressBar)
   cat(paste0("\nThe average acceptance rate is: ", as.character(c / n.iter),"\n"))
   
   return(chain)
@@ -144,151 +147,80 @@ MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0
 DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
   n = nrow(data)
   q = ncol(data)
+  
+  ## Draw a sample from the baseline measure
   baseline = sampleFromBaseline(S = n.iter, burn = burnin, q = q, a_pi, b_pi)
   
+  ## Initialize the chains
   Xi_chain = matrix(NA, n, n.iter)
   # n x n.iter matrix which collects the cluster indicators of each unit for every iteration 
-  
   A_chain = vector(mode = "list", length = n.iter)
   # List which collect the adjacency matrices of the visited graphs. In particular, each element of the
   # list is an array of K(t) adjacency matrices, where K(t) is the (random) number of mixture components
   # at iteration t.
-  
   alpha_0_chain = rep(NA, n.iter)
   # Vector which collects the values of the precision parameter (alpha_0) for every iteration
   
   ## Set the initial values
-  K_inits = 2 # Number of clusters
+  K = 2 # Number of clusters
   alpha_0 = 1 # Precision parameter
-  A_0 = array(0, c(q, q, K_inits)) # Graphs
-  colnames(A_0) = rownames(A_0) = 1:q
-  A_chain[[1]] = A_0
-  xi = sample(K_inits, n, replace = TRUE) # Cluster indicators
-  while(length(table(xi)) < K_inits){ # This loop makes sure that both clusters have at least one unit
-    xi = sample(K_inits, n, replace = TRUE)
+  A = array(0, c(q, q, K)) # Group-specific graphs
+  colnames(A) = rownames(A) = 1:q
+  A_chain[[1]] = A
+  xi = sample(K, n, replace = TRUE) # Cluster indicators
+  while(length(table(xi)) < K){ # This loop makes sure that both clusters have at least one unit
+    xi = sample(K, n, replace = TRUE)
   }
   Xi_chain[,1] = xi
-  
-  
-  graphs = A_0
+  graphs = A
   r = table(xi)
   
   ## MCMC iterations
+  message("RUNNING THE CHAIN")
+  progressBar = txtProgressBar(min = 2, max = n.iter, initial = 2, style = 3)
   for(t in 2:n.iter){
-    ### Update cluster indicators
-    maxCl = length(r) # Maximum number of clusters
-    ind = which(r != 0) # Indices of non-empty clusters
-    r = r[ind]
-    
-    #### Update the parameters u and v
-    if(length(r) == 1){
-      v = rbeta(length(r), 1 + r, alpha_0)
-    }
-    else{
-      v = rbeta(length(r), 1 + r, alpha_0 + c(rev(cumsum(rev(r)))[-1]))
-    }
-    v = c(v, rbeta(1, 1, alpha_0))
-
-    omega_tmp = v[1]
-    
-    for(k in 2:(length(r)+1)){
-      omega_tmp[k] = v[k]*prod(1 - v[1:(k-1)])
-    }
-    
-    R = omegatmp[length(omega_tmp)] # R is the weight for a potential new cluster
-    
-    omega = numeric(maxCl)
-    
-    omega[ind] = omega_tmp[-length(omega_tmp)]
-    
-    u = stats::runif(n)*omega[xi]
-    u_star = min(u)
-    
-    h = 0 # h is the number of non-empty clusters
-    
-    while(R > u_star){
-      
-      h = h+1
-      beta_temp = stats::rbeta(n = 1, shape1 = 1, shape2 = alpha_0)
-      
-      omega = c(omega, R*beta_temp) # weight of the new cluster
-      
-      # probabilità che un individuo venga assegnato ad un nuovo cluster
-      
-      R = R * (1 - beta_temp) # remaining weight
-      
-      Dag_star = out_baseline[,,sample(n_base - burn_base, 1)]
-      
-      Dags = abind(Dags, Dag_star)
-      
-    }
-    
-    ## [2] ## Update of indicator variables xi
-    
-    K_star = dim(Dags)[3]
-    probs = matrix(0,n,K_star)
-    
-    ### NEW CODE
-    for(k in 1:K_star){
-      for(i in 1:n){
-        boolvec = rep(FALSE,n)
-        boolvec[i] = TRUE
-        r_i = sum(!boolvec & xi == k)
-        L_i = length(unique(xi[!boolvec]))
-        data_num = data[boolvec | xi == k,]
-        data_den = data[!boolvec & xi == k,]
-        if(k <= L_i){
-          prob = r_i * exp(logMarginalLikelihood(Dags[,,k],data_num, a = 1) - logMarginalLikelihood(Dags[,,k],data_den,a = 1))
-        }
-        else{
-          prob = alpha_0 * exp(logMarginalLikelihood(Dags[,,k],data_num, a = 1) - logMarginalLikelihood(Dags[,,k],data_den,a = 1))
-        }
+    setTxtProgressBar(progressBar,t)
+    ## Update of indicator variables xi
+    maxCl = length(r) + 1
+    graphs = abind(graphs, baseline[,,sample(n.iter - burnin, 1)]) # Sample a new graph from the baseline
+    probs = matrix(0,n,maxCl)
+    for(i in 1:n){
+      L_i = length(unique(xi[-i])) # Number of clusters in the sample excluding observation x_i
+      boolvec = rep(FALSE,n)
+      boolvec[i] = TRUE
+      for(k in 1:L_i){
+        r_ki = sum(!boolvec & xi == k) # Number of observations included in cluster k excluding observation x_i
+        data_num = data[boolvec | xi == k,] # Dataset containing observation x_i plus all the observation in cluster k
+        data_den = data[!boolvec & xi == k,] # Dataset containing all the observation in cluster k excluding (eventually) x_i
+        ## Compute the probability that observation x_i is allocated to cluster k
+        prob = r_ki * exp(logMarginalLikelihood(graphs[,,k],data_num, a = 1) - logMarginalLikelihood(graphs[,,k],data_den,a = 1))
         probs[i,k] = prob
       }
+      ## Compute the probability that observation x_i is allocated to a new cluster
+      prob = alpha_0 * exp(logMarginalLikelihood(graphs[,,L_i + 1],data[boolvec,], a = 1))
+      probs[i,L_i + 1] = prob
     }
+    probs = probs / rowSums(probs) # Normalize the matrix of probabilities
+    xiNew = sapply(1:n, function(i) sample(1:(maxCl), size = 1, prob = probs[i,])) # New cluster allocation indices
+    labels = as.integer(names(table(xiNew)))
+    K = length(labels) # New number of clusters
+    graphs  = array(graphs[,,labels], c(q, q, K)) # Cluster-specific graphs
+    ### Reassign the labels so that they span from 1 to K
+    xiNew = as.factor(xiNew)
+    levels(xiNew) = 1:K
+    r = table(xiNew)
+    xi = c(xiNew)
+    print(xi)
     
-    probs = probs / rowSums(probs)
-    
-    xi_star = sapply(1:n, function(i) sample(1:(K_star), size = 1, prob = probs[i,]))
-    
-    labs = as.integer(names(table(xi_star)))
-    
-    K_star = length(labs)
-    
-    Dags  = array(Dags[,,labs], c(q, q, K_star))
-    
-    # Riassegno le etichette ai cluster in modo che vadano sempre da 1 a K
-    
-    xi_star = as.factor(xi_star); levels(xi_star) = 1:K_star   # update labels
-    
-    r = table(xi_star)
-    
-    omega = omega[labs]
-    
-    xi = c(xi_star)
-    
-    K = dim(Dags)[3]
-    
-    
-    ###############################
-    ## Update of alpha_0 given K ##
-    ###############################
-    
+    ## Update of alpha_0
     eta = rbeta(1, alpha_0 + 1, n)
-    
-    alpha_0 = c(rgamma(1, shape = a_alpha + K, rate = b_alpha - log(eta)), rgamma(1, shape = a_alpha + K - 1, rate = b_alpha - log(eta)))[sample(c(1,2), 1, prob = c(a_alpha + K - 1, n*(b_alpha - log(eta))))]
-    
+    alpha_0 = c(rgamma(1, shape = a_alpha + K, rate = b_alpha - log(eta)),
+                rgamma(1, shape = a_alpha + K - 1, rate = b_alpha - log(eta)))[sample(c(1,2), 1, prob = c(a_alpha + K - 1, n*(b_alpha - log(eta))))]
     alpha_0_chain[t] = alpha_0
     
-    
-    ###############################
-    ## Update DAGs D_1, ..., D_K ##
-    ###############################
-    
-    set = 1:K
-    
-    for(k in set){ # per ciascun cluster
-      currentCandidate = Dags[,,k]
+    ## Update of cluster-specific graphs
+    for(k in 1:K){
+      currentCandidate = graphs[,,k]
       newCandidate = newGraphProposal(currentCandidate)
       num = logMarginalLikelihood(newCandidate,data,2)
       den = logMarginalLikelihood(currentCandidate,data,2)
@@ -297,19 +229,22 @@ DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
       acceptanceProbability = min(marginalRatio * priorRatio,1)
       accepted = rbern(1,acceptanceProbability)
       if(accepted == 1){
-        Dags[,,k] = newCandidate
+        graphs[,,k] = newCandidate
       }
     }
     
-    A_chain[[t]]     = Dags
-    Xi_chain[,t]     = xi
-    
-    if(t%%100 == 0) print(paste0("Iteration ", t))
-    
-    
+    ## Update the chain status
+    A_chain[[t]] = graphs
+    Xi_chain[,t] = xi
   }
+  close(progressBar)
   
+  ## Construct the similarity matrix
+  similarityMatrix = matrix(0, nrow = n, ncol = n)
+  for(t in (burnin + 1):n.iter){
+    similarityMatrix = similarityMatrix + as.integer(matrix(Xi_chain[,t], nrow = n, ncol = n) == t(matrix(Xi_chain[,t], nrow = n, ncol = n)))
+  }
+  similarityMatrix = similarityMatrix / (n.iter - burnin)
   
-  return(list())
-  
+  return(list(similarityMatrix = similarityMatrix))
 }
