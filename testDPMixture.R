@@ -24,10 +24,10 @@ similarityMatrixtoClustering = function(similarityMatrix){
   return(indices)
 }
 
-# Generate two different DAGs
-q = 4 # Number of variables
-n_1 = 25 # Sample size for group 1
-n_2 = 25 # Sample size for group 2
+# Generate two different graphs
+q = 10 # Number of variables
+n_1 = 100 # Sample size for group 1
+n_2 = 100 # Sample size for group 2
 p = 2 / q # Edge-inclusion probability
 graph1 = generateDecomposableGraph(q,p)
 graph2 = generateDecomposableGraph(q,p)
@@ -57,4 +57,3 @@ similarityMatrix = mcmc$similarityMatrix
 clustering = similarityMatrixtoClustering(similarityMatrix)
 # Variation of Information (VI) between true and estimated clustering
 vi.dist(Xi,clustering)
-

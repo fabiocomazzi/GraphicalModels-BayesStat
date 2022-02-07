@@ -22,7 +22,7 @@ computeCounts = function(data, variables.values, variables.names = NULL){
 # a is a real positive number such that the parameters of the Dirichlet distribution are given
 # by a/dim(X_s) where X_s is the cartesian space of all the modalities of the variables in
 # subset.
-logMarginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
+logMarginalLikelihoodSubset = function(data,subset,a){
   if(a <= 0){
     stop("a should be a positive number!")
   }
@@ -67,7 +67,7 @@ logMarginalLikelihood = function(adjacencyMatrix,data,a){
   mlC = c()
   for(i in 1:length(cliques)){
     clique = cliques[[i]]
-    mlC = c(mlC,logMarginalLikelihoodSubset(adjacencyMatrix,data,clique,a))
+    mlC = c(mlC,logMarginalLikelihoodSubset(data,clique,a))
   }
   # For each separator we compute the associated marginal likelihood and store it in the
   # vector mlS.
@@ -78,7 +78,39 @@ logMarginalLikelihood = function(adjacencyMatrix,data,a){
   else{
     for(i in 1:length(separators)){
       separator = separators[[i]]
-      mlS = c(mlS,logMarginalLikelihoodSubset(adjacencyMatrix,data,separator,a))
+      mlS = c(mlS,logMarginalLikelihoodSubset(data,separator,a))
+    }
+  }
+  # We finally compute the total marginal likelihood via the factorization property.
+  result = sum(mlC) - sum(mlS)
+  return(result)
+}
+
+# Computes the (total) marginal likelihood starting from the clique-separator decomposition of the graph.
+logMarginalLikelihoodFromDecomposition = function(data,cliques,separators,a){
+  if(a <= 0){
+    stop("a should be a positive number!")
+  }
+  if(dim(data)[1] == 0){
+    return(0)
+  }
+  # For each clique we compute the associated marginal likelihood and store it in the
+  # vector mlC.
+  mlC = c()
+  for(i in 1:length(cliques)){
+    clique = cliques[[i]]
+    mlC = c(mlC,logMarginalLikelihoodSubset(data,clique,a))
+  }
+  # For each separator we compute the associated marginal likelihood and store it in the
+  # vector mlS.
+  mlS = c()
+  if(length(separators) == 0){
+    mlS = c(0)
+  }
+  else{
+    for(i in 1:length(separators)){
+      separator = separators[[i]]
+      mlS = c(mlS,logMarginalLikelihoodSubset(data,separator,a))
     }
   }
   # We finally compute the total marginal likelihood via the factorization property.
@@ -180,37 +212,62 @@ DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
   progressBar = txtProgressBar(min = 2, max = n.iter, initial = 2, style = 3)
   for(t in 2:n.iter){
     setTxtProgressBar(progressBar,t)
+    
     ## Update of indicator variables xi
-    maxCl = length(r) + 1
+    maxCl = length(r) + 1 # The new (potential) number of cluster is given by the old number of cluster + 1
     graphs = abind(graphs, baseline[,,sample(n.iter - burnin, 1)]) # Sample a new graph from the baseline
-    probs = matrix(0,n,maxCl)
-    for(i in 1:n){
-      L_i = length(unique(xi[-i])) # Number of clusters in the sample excluding observation x_i
-      boolvec = rep(FALSE,n)
-      boolvec[i] = TRUE
-      for(k in 1:L_i){
-        r_ki = sum(!boolvec & xi == k) # Number of observations included in cluster k excluding observation x_i
-        data_num = data[boolvec | xi == k,] # Dataset containing observation x_i plus all the observation in cluster k
-        data_den = data[!boolvec & xi == k,] # Dataset containing all the observation in cluster k excluding (eventually) x_i
-        ## Compute the probability that observation x_i is allocated to cluster k
-        prob = r_ki * exp(logMarginalLikelihood(graphs[,,k],data_num, a = 1) - logMarginalLikelihood(graphs[,,k],data_den,a = 1))
-        probs[i,k] = prob
+    probs = matrix(0,n,maxCl) # The unit i is assigned to cluster j with probability = probs[i,j]
+    for(k in 1:(maxCl-1)){ # For every cluster
+      graph = graphs[,,k] # Group-specific graph
+      # Compute the cliques and separators of the group-specific graph
+      decomposition = getCliquesAndSeparators(graph)
+      cliques = decomposition[[1]]
+      separators = decomposition[[2]]
+      # Compute the marginal likelihood with respect to all observations in cluster k
+      data_clust = data[xi == k,]
+      ml_clust = logMarginalLikelihoodFromDecomposition(data_clust,cliques,separators,a = 1)
+      for(i in 1:n){ # For every unit
+        L_i = length(unique(xi[-i])) # Number of clusters in the sample excluding observation x_i
+        if(L_i == (maxCl - 1) | xi[i] != k){ # If the unit is the only one in the cluster k then it cannot be reassigned to k (the corresponding probability is not updated and remains 0)
+          boolvec = rep(FALSE,n)
+          boolvec[i] = TRUE # boolvec is TRUE in the position corresponding to the i-th unit, FALSE otherwise
+          r_ki = sum(!boolvec & xi == k) # Number of observations included in cluster k excluding observation x_i
+          if(xi[i] == k){
+            ml_num = ml_clust # Marginal likelihood of the numerator
+            data_den = data[!boolvec & xi == k,] # Dataset containing all the observation in cluster k excluding x_i
+            ml_den = logMarginalLikelihoodFromDecomposition(data_den,cliques,separators,a = 1) # Marginal likelihood of the denominator
+          }
+          else{
+            ml_den = ml_clust # Marginal likelihood of the denominator
+            data_num = data[boolvec | xi == k,] # Dataset containing observation x_i plus all the observation in cluster k
+            ml_num = logMarginalLikelihoodFromDecomposition(data_num,cliques,separators,a = 1) # Marginal likelihood of the numerator
+          }
+          prob = r_ki * exp(ml_num - ml_den)
+          probs[i,k] = prob
+        }
       }
-      ## Compute the probability that observation x_i is allocated to a new cluster
-      prob = alpha_0 * exp(logMarginalLikelihood(graphs[,,L_i + 1],data[boolvec,], a = 1))
-      probs[i,L_i + 1] = prob
+    }
+    # Compute the probability that the unit is assigned to the new cluster (with index maxCl)
+    graph = graphs[,,maxCl]
+    # Compute the cliques and separators of the group-specific graph
+    decomposition = getCliquesAndSeparators(graph)
+    cliques = decomposition[[1]]
+    separators = decomposition[[2]]
+    for(i in 1:n){
+      ml = logMarginalLikelihoodFromDecomposition(data[i,],cliques,separators,a = 1)
+      prob = alpha_0 * exp(ml)
+      probs[i,maxCl] = prob
     }
     probs = probs / rowSums(probs) # Normalize the matrix of probabilities
     xiNew = sapply(1:n, function(i) sample(1:(maxCl), size = 1, prob = probs[i,])) # New cluster allocation indices
     labels = as.integer(names(table(xiNew)))
     K = length(labels) # New number of clusters
-    graphs  = array(graphs[,,labels], c(q, q, K)) # Cluster-specific graphs
+    graphs = array(graphs[,,labels], c(q, q, K)) # Cluster-specific graphs
     ### Reassign the labels so that they span from 1 to K
     xiNew = as.factor(xiNew)
     levels(xiNew) = 1:K
     r = table(xiNew)
     xi = c(xiNew)
-    print(xi)
     
     ## Update of alpha_0
     eta = rbeta(1, alpha_0 + 1, n)
