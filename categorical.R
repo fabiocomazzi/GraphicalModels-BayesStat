@@ -175,8 +175,71 @@ MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0
   return(chain)
 }
 
+# Computes the ratio of the marginal likelihoods restricted to the variables in subset
+# and computed on two datasets which differ in just one unit.
+logMarginalLikelihoodRatio = function(data,clusterMask,iMask,subset,a){
+  if(a <= 0){
+    stop("a should be a positive number!")
+  }
+  # The matrix table contains all the possible combinations of the modalities of the
+  # variables in subset.
+  subset = as.vector(subset)
+  values = list()
+  for(i in 1:length(subset)){
+    values[[i]] = unique(data[subset[i]])[[1]]
+  }
+  table = as.matrix(expand.grid(values))
+  # We compute the following quantities:
+  aX = a/dim(table)[1] # The prior parameter associated to the modality of the i-th observation
+  count = 0
+  for(i in 1:dim(table)[1]){
+    variables.values = table[i,]
+    if(setequal(variables.values, data[iMask,subset])){
+      print(variables.values)
+      count = computeCounts(data[!iMask & clusterMask,],variables.values,subset) # The count of the modality of the i-th observation on the dataset (excluding the i-th observation)
+    }
+  }
+  n = sum(clusterMask | iMask) # The number of observation in the considered cluster (plus eventually the i-th observation)
+  # Finally, we compute the value of the ratio of the marginal likelihoods
+  ml = log((aX + count) / (a + n - 1))
+  return(ml)
+}
+
+# Computes the (log) predictive distribution of unit in position given by iMask belonging in the cluster
+# made by the units given by clusterMask.
+logPredictiveDistribution = function(data,clusterMask,iMask,cliques,separators,a){
+  if(a <= 0){
+    stop("a should be a positive number!")
+  }
+  if(dim(data)[1] == 0){
+    return(0)
+  }
+  # For each clique we compute the associated marginal likelihood and store it in the
+  # vector mlC.
+  mlC = c()
+  for(i in 1:length(cliques)){
+    clique = cliques[[i]]
+    mlC = c(mlC,logMarginalLikelihoodRatio(data,clusterMask,iMask,clique,a))
+  }
+  # For each separator we compute the associated marginal likelihood and store it in the
+  # vector mlS.
+  mlS = c()
+  if(length(separators) == 0){
+    mlS = c(0)
+  }
+  else{
+    for(i in 1:length(separators)){
+      separator = separators[[i]]
+      mlS = c(mlS,logMarginalLikelihoodRatio(data,clusterMask,iMask,separator,a))
+    }
+  }
+  # We finally compute the total marginal likelihood via the factorization property.
+  result = sum(mlC) - sum(mlS)
+  return(result)
+}
+
 # Dirichlet Process Mixture
-DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
+DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 1){
   n = nrow(data)
   q = ncol(data)
   
@@ -225,22 +288,22 @@ DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
       separators = decomposition[[2]]
       # Compute the marginal likelihood with respect to all observations in cluster k
       data_clust = data[xi == k,]
-      ml_clust = logMarginalLikelihoodFromDecomposition(data_clust,cliques,separators,a = 1)
+      ml_clust = logMarginalLikelihoodFromDecomposition(data_clust,cliques,separators,a)
       for(i in 1:n){ # For every unit
         L_i = length(unique(xi[-i])) # Number of clusters in the sample excluding observation x_i
         if(L_i == (maxCl - 1) | xi[i] != k){ # If the unit is the only one in the cluster k then it cannot be reassigned to k (the corresponding probability is not updated and remains 0)
-          boolvec = rep(FALSE,n)
-          boolvec[i] = TRUE # boolvec is TRUE in the position corresponding to the i-th unit, FALSE otherwise
-          r_ki = sum(!boolvec & xi == k) # Number of observations included in cluster k excluding observation x_i
+          iMask = rep(FALSE,n)
+          iMask[i] = TRUE # iMask is TRUE in the position corresponding to the i-th unit, FALSE otherwise
+          r_ki = sum(!iMask & xi == k) # Number of observations included in cluster k excluding observation x_i
           if(xi[i] == k){
             ml_num = ml_clust # Marginal likelihood of the numerator
-            data_den = data[!boolvec & xi == k,] # Dataset containing all the observation in cluster k excluding x_i
-            ml_den = logMarginalLikelihoodFromDecomposition(data_den,cliques,separators,a = 1) # Marginal likelihood of the denominator
+            data_den = data[!iMask & xi == k,] # Dataset containing all the observation in cluster k excluding x_i
+            ml_den = logMarginalLikelihoodFromDecomposition(data_den,cliques,separators,a) # Marginal likelihood of the denominator
           }
           else{
             ml_den = ml_clust # Marginal likelihood of the denominator
-            data_num = data[boolvec | xi == k,] # Dataset containing observation x_i plus all the observation in cluster k
-            ml_num = logMarginalLikelihoodFromDecomposition(data_num,cliques,separators,a = 1) # Marginal likelihood of the numerator
+            data_num = data[iMask | xi == k,] # Dataset containing observation x_i plus all the observation in cluster k
+            ml_num = logMarginalLikelihoodFromDecomposition(data_num,cliques,separators,a) # Marginal likelihood of the numerator
           }
           prob = r_ki * exp(ml_num - ml_den)
           probs[i,k] = prob
@@ -255,6 +318,125 @@ DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi){
     separators = decomposition[[2]]
     for(i in 1:n){
       ml = logMarginalLikelihoodFromDecomposition(data[i,],cliques,separators,a = 1)
+      prob = alpha_0 * exp(ml)
+      probs[i,maxCl] = prob
+    }
+    probs = probs / rowSums(probs) # Normalize the matrix of probabilities
+    xiNew = sapply(1:n, function(i) sample(1:(maxCl), size = 1, prob = probs[i,])) # New cluster allocation indices
+    labels = as.integer(names(table(xiNew)))
+    K = length(labels) # New number of clusters
+    graphs = array(graphs[,,labels], c(q, q, K)) # Cluster-specific graphs
+    ### Reassign the labels so that they span from 1 to K
+    xiNew = as.factor(xiNew)
+    levels(xiNew) = 1:K
+    r = table(xiNew)
+    xi = c(xiNew)
+    
+    ## Update of alpha_0
+    eta = rbeta(1, alpha_0 + 1, n)
+    alpha_0 = c(rgamma(1, shape = a_alpha + K, rate = b_alpha - log(eta)),
+                rgamma(1, shape = a_alpha + K - 1, rate = b_alpha - log(eta)))[sample(c(1,2), 1, prob = c(a_alpha + K - 1, n*(b_alpha - log(eta))))]
+    alpha_0_chain[t] = alpha_0
+    
+    ## Update of cluster-specific graphs
+    for(k in 1:K){
+      currentCandidate = graphs[,,k]
+      newCandidate = newGraphProposal(currentCandidate)
+      num = logMarginalLikelihood(newCandidate,data,2)
+      den = logMarginalLikelihood(currentCandidate,data,2)
+      marginalRatio = exp(num - den)
+      priorRatio = 1
+      acceptanceProbability = min(marginalRatio * priorRatio,1)
+      accepted = rbern(1,acceptanceProbability)
+      if(accepted == 1){
+        graphs[,,k] = newCandidate
+      }
+    }
+    
+    ## Update the chain status
+    A_chain[[t]] = graphs
+    Xi_chain[,t] = xi
+  }
+  close(progressBar)
+  
+  ## Construct the similarity matrix
+  similarityMatrix = matrix(0, nrow = n, ncol = n)
+  for(t in (burnin + 1):n.iter){
+    similarityMatrix = similarityMatrix + as.integer(matrix(Xi_chain[,t], nrow = n, ncol = n) == t(matrix(Xi_chain[,t], nrow = n, ncol = n)))
+  }
+  similarityMatrix = similarityMatrix / (n.iter - burnin)
+  
+  return(list(similarityMatrix = similarityMatrix))
+}
+
+# Dirichlet Process Mixture (efficient implementation)
+DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 1){
+  n = nrow(data)
+  q = ncol(data)
+  
+  ## Draw a sample from the baseline measure
+  baseline = sampleFromBaseline(S = n.iter, burn = burnin, q = q, a_pi, b_pi)
+  
+  ## Initialize the chains
+  Xi_chain = matrix(NA, n, n.iter)
+  # n x n.iter matrix which collects the cluster indicators of each unit for every iteration 
+  A_chain = vector(mode = "list", length = n.iter)
+  # List which collect the adjacency matrices of the visited graphs. In particular, each element of the
+  # list is an array of K(t) adjacency matrices, where K(t) is the (random) number of mixture components
+  # at iteration t.
+  alpha_0_chain = rep(NA, n.iter)
+  # Vector which collects the values of the precision parameter (alpha_0) for every iteration
+  
+  ## Set the initial values
+  K = 2 # Number of clusters
+  alpha_0 = 1 # Precision parameter
+  A = array(0, c(q, q, K)) # Group-specific graphs
+  colnames(A) = rownames(A) = 1:q
+  A_chain[[1]] = A
+  xi = sample(K, n, replace = TRUE) # Cluster indicators
+  while(length(table(xi)) < K){ # This loop makes sure that both clusters have at least one unit
+    xi = sample(K, n, replace = TRUE)
+  }
+  Xi_chain[,1] = xi
+  graphs = A
+  r = table(xi)
+  
+  ## MCMC iterations
+  message("RUNNING THE CHAIN")
+  progressBar = txtProgressBar(min = 2, max = n.iter, initial = 2, style = 3)
+  for(t in 2:n.iter){
+    setTxtProgressBar(progressBar,t)
+    
+    ## Update of indicator variables xi
+    maxCl = length(r) + 1 # The new (potential) number of cluster is given by the old number of cluster + 1
+    graphs = abind(graphs, baseline[,,sample(n.iter - burnin, 1)]) # Sample a new graph from the baseline
+    probs = matrix(0,n,maxCl) # The unit i is assigned to cluster j with probability = probs[i,j]
+    for(k in 1:(maxCl-1)){ # For every cluster
+      graph = graphs[,,k] # Group-specific graph
+      # Compute the cliques and separators of the group-specific graph
+      decomposition = getCliquesAndSeparators(graph)
+      cliques = decomposition[[1]]
+      separators = decomposition[[2]]
+      for(i in 1:n){ # For every unit
+        L_i = length(unique(xi[-i])) # Number of clusters in the sample excluding observation x_i
+        if(L_i == (maxCl - 1) | xi[i] != k){ # If the unit is the only one in the cluster k then it cannot be reassigned to k (the corresponding probability is not updated and remains 0)
+          iMask = rep(FALSE,n)
+          iMask[i] = TRUE # iMask is TRUE in the position corresponding to the i-th unit, FALSE otherwise
+          clusterMask = xi == k
+          r_ki = sum(!iMask & clusterMask) # Number of observations included in cluster k excluding observation x_i
+          prob = r_ki * exp(logPredictiveDistribution(data,clusterMask,iMask,cliques,separators,a))
+          probs[i,k] = prob
+        }
+      }
+    }
+    # Compute the probability that the unit is assigned to the new cluster (with index maxCl)
+    graph = graphs[,,maxCl]
+    # Compute the cliques and separators of the group-specific graph
+    decomposition = getCliquesAndSeparators(graph)
+    cliques = decomposition[[1]]
+    separators = decomposition[[2]]
+    for(i in 1:n){
+      ml = logMarginalLikelihoodFromDecomposition(data[i,],cliques,separators,a)
       prob = alpha_0 * exp(ml)
       probs[i,maxCl] = prob
     }

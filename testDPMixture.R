@@ -50,7 +50,9 @@ a_pi = 1
 b_pi = 2*(q-2)/3
 a_alpha = 1
 b_alpha = 3
-mcmc = DPMixture(data = X, n.iter, burnin, a_alpha, b_alpha, a_pi, b_pi)
+# mcmc = DPMixture(data = X, n.iter, burnin, a_alpha, b_alpha, a_pi, b_pi)
+mcmc = DPMixture_Efficient(data = X, n.iter, burnin, a_alpha, b_alpha, a_pi, b_pi)
+
 
 # Cluster estimates
 similarityMatrix = mcmc$similarityMatrix
