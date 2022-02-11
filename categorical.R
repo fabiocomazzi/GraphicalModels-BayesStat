@@ -374,9 +374,9 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
   n = nrow(data)
   q = ncol(data)
   # Compute the total number of possible configurations of the variables in the dataset
-  modalities = 1
+  modalities = c()
   for(j in 1:dim(data)[2]){
-    modalities = modalities * length(unique(data[,j]))
+    modalities = c(modalities, length(unique(data[,j])))
   }
   
   ## Draw a sample from the baseline measure
@@ -435,8 +435,22 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
       }
     }
     # Compute the probability that the unit is assigned to the new cluster (with index maxCl)
+    graph = graphs[,,maxCl]
+    # Compute the cliques and separators of the group-specific graph and the predictive of the unit belonging to a new cluster
+    decomposition = getCliquesAndSeparators(graph)
+    cliques = decomposition[[1]]
+    separators = decomposition[[2]]
+    num = 1
+    den = 1
+    for(clique in cliques){
+      num = num / prod(modalities[clique])
+    }
+    for(separator in separators){
+      den = den / prod(modalities[separator])
+    }
+    predictive = num / den
+    prob = alpha_0 * predictive
     for(i in 1:n){
-      prob = alpha_0 / modalities
       probs[i,maxCl] = prob
     }
     probs = probs / rowSums(probs) # Normalize the matrix of probabilities
@@ -449,7 +463,6 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
     levels(xiNew) = 1:K
     r = table(xiNew)
     xi = c(xiNew)
-    print(xi)
     
     ## Update of alpha_0
     eta = rbeta(1, alpha_0 + 1, n)
