@@ -26,6 +26,7 @@ logMarginalLikelihoodSubset = function(data,subset,a){
   if(a <= 0){
     stop("a should be a positive number!")
   }
+  n = dim(data)[1]
   # The matrix table contains all the possible combinations of the modalities of the
   # variables in subset.
   subset = as.vector(subset)
@@ -46,7 +47,7 @@ logMarginalLikelihoodSubset = function(data,subset,a){
   aVec = rep(a/dim(table)[1],dim(table)[1])
   # Finally, we compute the value of the marginal likelihood as the ratio of the normalizing constants
   # of the prior and posterior distribution.
-  ml = lgamma(sum(aVec)) - lgamma(sum(aVec + count)) + sum(lgamma(aVec + count) - lgamma(aVec))
+  ml = lgamma(a) - lgamma(a + n) + sum(lgamma(aVec + count) - lgamma(aVec))
   return(ml)
 }
 
@@ -195,7 +196,6 @@ logMarginalLikelihoodRatio = function(data,clusterMask,iMask,subset,a){
   for(i in 1:dim(table)[1]){
     variables.values = table[i,]
     if(setequal(variables.values, data[iMask,subset])){
-      print(variables.values)
       count = computeCounts(data[!iMask & clusterMask,],variables.values,subset) # The count of the modality of the i-th observation on the dataset (excluding the i-th observation)
     }
   }
@@ -373,6 +373,11 @@ DPMixture = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 1){
 DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 1){
   n = nrow(data)
   q = ncol(data)
+  # Compute the total number of possible configurations of the variables in the dataset
+  modalities = 1
+  for(j in 1:dim(data)[2]){
+    modalities = modalities * length(unique(data[,j]))
+  }
   
   ## Draw a sample from the baseline measure
   baseline = sampleFromBaseline(S = n.iter, burn = burnin, q = q, a_pi, b_pi)
@@ -430,14 +435,8 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
       }
     }
     # Compute the probability that the unit is assigned to the new cluster (with index maxCl)
-    graph = graphs[,,maxCl]
-    # Compute the cliques and separators of the group-specific graph
-    decomposition = getCliquesAndSeparators(graph)
-    cliques = decomposition[[1]]
-    separators = decomposition[[2]]
     for(i in 1:n){
-      ml = logMarginalLikelihoodFromDecomposition(data[i,],cliques,separators,a)
-      prob = alpha_0 * exp(ml)
+      prob = alpha_0 / modalities
       probs[i,maxCl] = prob
     }
     probs = probs / rowSums(probs) # Normalize the matrix of probabilities
@@ -450,6 +449,7 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
     levels(xiNew) = 1:K
     r = table(xiNew)
     xi = c(xiNew)
+    print(xi)
     
     ## Update of alpha_0
     eta = rbeta(1, alpha_0 + 1, n)
