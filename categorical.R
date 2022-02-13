@@ -18,6 +18,19 @@ computeCounts = function(data, variables.values, variables.names = NULL){
   return(dim(temp)[1])
 }
 
+# Computes the
+countDuplicates = function(data){
+  if(is.null(dim(data))){
+    return(table(data))
+  }
+  
+  x = do.call('paste', c(data, sep = '\r'))
+  ordered_x = order(x)
+  rl = rle(x[ordered_x])
+  
+  return(cbind(data[ordered_x[cumsum(rl$lengths)],,drop=FALSE], count = rl$lengths))
+}
+
 # Computes the marginal likelihood restricted to a specific subset of nodes of the graph.
 # a is a real positive number such that the parameters of the Dirichlet distribution are given
 # by a/dim(X_s) where X_s is the cartesian space of all the modalities of the variables in
@@ -178,28 +191,22 @@ MetropolisHastingsCategorical = function(data,initialCandidate,n.iter,burnin = 0
 
 # Computes the ratio of the marginal likelihoods restricted to the variables in subset
 # and computed on two datasets which differ in just one unit.
-logMarginalLikelihoodRatio = function(data,clusterMask,iMask,subset,a){
+logMarginalLikelihoodRatio = function(countsTable,n,modalities,index,subset,a){
   if(a <= 0){
     stop("a should be a positive number!")
   }
-  # The matrix table contains all the possible combinations of the modalities of the
-  # variables in subset.
   subset = as.vector(subset)
-  values = list()
-  for(i in 1:length(subset)){
-    values[[i]] = unique(data[subset[i]])[[1]]
-  }
-  table = as.matrix(expand.grid(values))
   # We compute the following quantities:
-  aX = a/dim(table)[1] # The prior parameter associated to the modality of the i-th observation
+  cardinality = prod(modalities[subset]) # The number of possible configurations of the variables in subset
+  aX = a/cardinality # The prior parameter associated to the modality of the i-th observation
   count = 0
-  for(i in 1:dim(table)[1]){
-    variables.values = table[i,]
-    if(setequal(variables.values, data[iMask,subset])){
-      count = computeCounts(data[!iMask & clusterMask,],variables.values,subset) # The count of the modality of the i-th observation on the dataset (excluding the i-th observation)
-    }
+  if(index != 0){ # By construction if index == 0 then count = 0
+    aggregatedCounts = aggregate(countsTable$count, by = as.list(countsTable[subset]), FUN = sum) # Compute the counts of the modalities restricted to the variables in subset
+    modality = countsTable[index,-dim(countsTable)[2]] # Retrieve the modality of observed for the i-th unit
+    modality = modality[subset] # Restrict the modality to the variables in subset
+    m = which(apply(as.data.frame(aggregatedCounts[,-dim(aggregatedCounts)[2]]), 1, function(x) return(all(x == modality)))) # Get the row index of the count corresponding to the modality of the i-th unit
+    count = aggregatedCounts[m,]$x # Get the count corresponding to the modality of the i-th unit
   }
-  n = sum(clusterMask | iMask) # The number of observation in the considered cluster (plus eventually the i-th observation)
   # Finally, we compute the value of the ratio of the marginal likelihoods
   ml = log((aX + count) / (a + n - 1))
   return(ml)
@@ -207,19 +214,16 @@ logMarginalLikelihoodRatio = function(data,clusterMask,iMask,subset,a){
 
 # Computes the (log) predictive distribution of unit in position given by iMask belonging in the cluster
 # made by the units given by clusterMask.
-logPredictiveDistribution = function(data,clusterMask,iMask,cliques,separators,a){
+logPredictiveDistribution = function(countsTable,n,modalities,index,cliques,separators,a){
   if(a <= 0){
     stop("a should be a positive number!")
-  }
-  if(dim(data)[1] == 0){
-    return(0)
   }
   # For each clique we compute the associated marginal likelihood and store it in the
   # vector mlC.
   mlC = c()
   for(i in 1:length(cliques)){
     clique = cliques[[i]]
-    mlC = c(mlC,logMarginalLikelihoodRatio(data,clusterMask,iMask,clique,a))
+    mlC = c(mlC,logMarginalLikelihoodRatio(countsTable,n,modalities,index,clique,a))
   }
   # For each separator we compute the associated marginal likelihood and store it in the
   # vector mlS.
@@ -230,7 +234,7 @@ logPredictiveDistribution = function(data,clusterMask,iMask,cliques,separators,a
   else{
     for(i in 1:length(separators)){
       separator = separators[[i]]
-      mlS = c(mlS,logMarginalLikelihoodRatio(data,clusterMask,iMask,separator,a))
+      mlS = c(mlS,logMarginalLikelihoodRatio(countsTable,n,modalities,index,separator,a))
     }
   }
   # We finally compute the total marginal likelihood via the factorization property.
@@ -417,6 +421,8 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
     graphs = abind(graphs, baseline[,,sample(n.iter - burnin, 1)]) # Sample a new graph from the baseline
     probs = matrix(0,n,maxCl) # The unit i is assigned to cluster j with probability = probs[i,j]
     for(k in 1:(maxCl-1)){ # For every cluster
+      clusterMask = xi == k
+      countsTableTotal = countDuplicates(data[clusterMask,]) # Table of counts for the units in cluster k
       graph = graphs[,,k] # Group-specific graph
       # Compute the cliques and separators of the group-specific graph
       decomposition = getCliquesAndSeparators(graph)
@@ -424,12 +430,20 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
       separators = decomposition[[2]]
       for(i in 1:n){ # For every unit
         L_i = length(unique(xi[-i])) # Number of clusters in the sample excluding observation x_i
+        countsTable = countsTableTotal
+        index = which(apply(countsTable[,-dim(countsTable)[2]], 1, function(x) return(all(x == data[i,])))) # Row of countsTable corresponding to the configuration of the i-th unit
+        if(length(index) == 0){ # Set index = 0 if the configuration of the i-th unit does not appear in the cluster k
+          index = 0
+        }
+        if(xi[i] == k){ # If unit i belongs to cluster k than we need to reduce the count of the configuration corresponding to i by 1
+          countsTable[index,]$count = countsTable[index,]$count - 1
+        }
         if(L_i == (maxCl - 1) | xi[i] != k){ # If the unit is the only one in the cluster k then it cannot be reassigned to k (the corresponding probability is not updated and remains 0)
           iMask = rep(FALSE,n)
           iMask[i] = TRUE # iMask is TRUE in the position corresponding to the i-th unit, FALSE otherwise
-          clusterMask = xi == k
           r_ki = sum(!iMask & clusterMask) # Number of observations included in cluster k excluding observation x_i
-          prob = r_ki * exp(logPredictiveDistribution(data,clusterMask,iMask,cliques,separators,a))
+          n_obs = sum(clusterMask | iMask) # The number of observation in the considered cluster (plus eventually the i-th observation)
+          prob = r_ki * exp(logPredictiveDistribution(countsTable,n = n_obs,modalities,index,cliques,separators,a))
           probs[i,k] = prob
         }
       }
@@ -500,3 +514,4 @@ DPMixture_Efficient = function(data,n.iter,burnin,a_alpha,b_alpha,a_pi,b_pi,a = 
   
   return(list(similarityMatrix = similarityMatrix))
 }
+
