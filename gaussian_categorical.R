@@ -13,7 +13,7 @@ library(tmvtnorm)
 # Z will be sampled from a truncated gaussian according to the cutoffs tetha
 # once we have z we just follows the same procedure as for the pure gaussian case
 
-MetropolisHastingsGaussianCategorical = function(data, initialCandidate, n.iter, burnin = 0, thin = 1, prior, p = NULL, b = NULL){
+MetropolisHastingsGaussianCategorical = function(data, initialCandidate, n.iter, burnin = 0, thin = 1, prior, p = NULL, b = NULL, algorithm="gibbs"){
   # We check that the passed parameters are correct
   if(!prior %in% c("Uniform","Binomial","Beta-Binomial")){
     stop("prior should be either 'Uniform', 'Binomial' or 'Beta-Binomial'!")
@@ -27,11 +27,11 @@ MetropolisHastingsGaussianCategorical = function(data, initialCandidate, n.iter,
   n = dim(data)[1]
   D = 10 * diag(1, dim(data)[2]) #parameter D of the Hyperinverse Whishart
   x = data.matrix(data)
-  tau_prior = 100 #std deviation prior on the cutoffs vector
+  tau_prior = 10 #std deviation prior on the cutoffs vector
   
   #initialization
   tetha = rep(0, dim(x)[2]) #initialize tetha with zeros
-  Z = generate_Z(Sigma=D, lower=lower_bounds(tetha,x), upper=upper_bounds(tetha,x), algorithm="gibbs")
+  Z = generate_Z(Sigma=D, lower=lower_bounds(tetha,x), upper=upper_bounds(tetha,x), algorithm=algorithm)
   Sigma = D + t(Z)%*%Z
   D_star = Sigma #That's the parameter of the posterior for the Sigma
   
@@ -44,7 +44,7 @@ MetropolisHastingsGaussianCategorical = function(data, initialCandidate, n.iter,
       
       tetha = MH_tetha(Sigma=Sigma, x=x, tau_prior=tau_prior, tetha=tetha) #updata tetha vector with a MH step
       Sigma = update_Sigma(df=b+n, Dstar=D_star, adj=currentCandidate) #update Sigma
-      Z = generate_Z(Sigma=Sigma, lower=lower_bounds(tetha,x), upper=upper_bounds(tetha,x), algorithm="gibbs")
+      Z = generate_Z(Sigma=Sigma, lower=lower_bounds(tetha,x), upper=upper_bounds(tetha,x), algorithm=algorithm)
       D_star = D + t(Z)%*%Z #update D_star for the HWS
       
       newCandidate = newGraphProposal(currentCandidate)

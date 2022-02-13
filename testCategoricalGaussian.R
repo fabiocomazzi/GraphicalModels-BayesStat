@@ -4,8 +4,8 @@ source("gaussian_categorical.R")
 
 # Generate 20 decomposable graph that will be used as the true graph to generate
 # 20 different datasets
-number_of_trial = 20
-number_of_node = 5
+number_of_trial = 5
+number_of_node = 6
 trueGraphs = list()
 encodedList = c()
 for(i in 1:number_of_trial){
@@ -30,7 +30,7 @@ for(trueGraph in trueGraphs){
   data = generateCategoricalDataFromGraph(adjacencyMatrix = trueGraph, n.obs = 1000, n.variables = number_of_node, p = 0.3)
   initialCandidate = matrix(0,number_of_node,number_of_node)
   print(paste("graph ", count))
-  chain = MetropolisHastingsGaussianCategorical(data[[2]], initialCandidate, 100, 200, 1, prior = "Binomial", p=0.3)
+  chain = MetropolisHastingsGaussianCategorical(data[[2]], initialCandidate, 100, 300, 1, prior = "Binomial", p=0.3)
   
   # Median Probability Graph
   mpg = medianProbabilityGraph(chain)
