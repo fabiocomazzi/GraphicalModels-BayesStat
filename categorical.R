@@ -18,7 +18,7 @@ computeCounts = function(data, variables.values, variables.names = NULL){
   return(dim(temp)[1])
 }
 
-# Computes the
+# Computes the contingency table of the observations in data.
 countDuplicates = function(data){
   if(is.null(dim(data))){
     return(table(data))
