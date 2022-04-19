@@ -42,7 +42,7 @@ logMarginalLikelihoodSubset = function(adjacencyMatrix,data,subset,a){
     variables.values = table[i,]
     count = c(count,computeCounts(data,variables.values,subset))
   }
-  # This is the vector of the parameters of the prior (Dirichlet) distribution. 
+  # This is the vector of the parameters of the prior (Dirichlet) distribution.
   aVec = rep(a/dim(table)[1],dim(table)[1])
   # Finally, we compute the value of the marginal likelihood as the ratio of the normalizing constants
   # of the prior and posterior distribution.
