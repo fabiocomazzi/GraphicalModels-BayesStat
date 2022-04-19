@@ -1,6 +1,8 @@
 setwd("~/GitHub/GraphicalModels-BayesStat")
 source("utilityFunctions.R")
+source("cutoff_utility.R")
 library(CholWishart)
+library(tmvtnorm)
 
 
 generateGaussianDataFromGraph = function(adjacencyMatrix=NULL, n.obs, n.variables, p=NULL, covariance=NULL){
@@ -121,8 +123,8 @@ MetropolisHastingsGaussian = function(data, initialCandidate, n.iter, burnin = 0
   for(i in 1:n.iter){
     setTxtProgressBar(progressBar,i)
     newCandidate = newGraphProposal(currentCandidate)
-    num = logMarginalLikelihoodGaussian(newCandidate,data,b, D)
-    den = logMarginalLikelihoodGaussian(currentCandidate,data,b, D)
+    num = logMarginalLikelihoodGaussian(newCandidate,data,b, D, D_star=D_star)
+    den = logMarginalLikelihoodGaussian(currentCandidate,data,b, D, D_star=D_star)
     marginalRatio = exp(num - den)
     priorRatio = switch(prior, "Uniform" = 1, "Binomial" = binomialPrior(currentCandidate,newCandidate,p), "Beta-Binomial" = betaBinomialPrior(currentCandidate,newCandidate,a,b))
     acceptanceProbability = min(marginalRatio * priorRatio,1)
@@ -143,8 +145,12 @@ MetropolisHastingsGaussian = function(data, initialCandidate, n.iter, burnin = 0
   return(chain)
 }
 
+
+
 #############################################################
 ################Test a MH with a random graph################
+#############################################################
+
 if(FALSE){
   while(TRUE){
     truegraph_ = erdos.renyi.game(6,0.3,type="gnp",directed = FALSE)

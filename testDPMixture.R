@@ -24,7 +24,7 @@ similarityMatrixtoClustering = function(similarityMatrix){
   return(indices)
 }
 
-# Generate two different DAGs
+# Generate two different graphs
 q = 10 # Number of variables
 n_1 = 100 # Sample size for group 1
 n_2 = 100 # Sample size for group 2
@@ -50,11 +50,12 @@ a_pi = 1
 b_pi = 2*(q-2)/3
 a_alpha = 1
 b_alpha = 3
-mcmc = DPMixture(data = X, n.iter, burnin, a_alpha, b_alpha, a_pi, b_pi)
+# mcmc = DPMixture(data = X, n.iter, burnin, a_alpha, b_alpha, a_pi, b_pi)
+mcmc = DPMixture_Efficient(data = X, n.iter, burnin, a_alpha, b_alpha, a_pi, b_pi)
+
 
 # Cluster estimates
 similarityMatrix = mcmc$similarityMatrix
 clustering = similarityMatrixtoClustering(similarityMatrix)
 # Variation of Information (VI) between true and estimated clustering
 vi.dist(Xi,clustering)
-

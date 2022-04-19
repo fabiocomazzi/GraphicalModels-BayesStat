@@ -9,6 +9,8 @@ library(plyr)
 library(pcalg)
 library(gRbase)
 library(abind)
+library(fields)
+library(network)
 
 # n.obs is the number of observations to simulate (int), n.variables is the number of 
 # random variables to generate and (optional) variables.names is a vector of 
@@ -80,6 +82,18 @@ plotGraph = function(adjacencyMatrix, variables.names = NULL, main = NULL){
   }
   graph = graph_from_adjacency_matrix(adjacencyMatrix, mode = "undirected")
   plot(graph, main = main)
+}
+
+# Plots the graph in a circular shape given its adjacency matrix.
+plotGraphCircular = function(adjacencyMatrix){
+  labs = as.character(c(1:dim(adjacencyMatrix)[1]))
+  graph = network(adjacencyMatrix, label = labs)
+  vertex_col = "gray90"
+  plot.network(graph, displaylabels = TRUE, vertex.col = vertex_col,
+               mode = "circle",
+               label.pos = 5,
+               usecurve = TRUE, edge.curve = 0, vertex.cex = 2.5,
+               label.cex = 0.8, edge.lwd = 0.1, arrowhead.cex = 0)
 }
 
 # Checks wheter the graph is decomposable or not. adjacencyMatrix
